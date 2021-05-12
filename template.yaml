@@ -38,7 +38,10 @@ Parameters:
     Default: admin_user
 
 Resources:
-  mainVPC:
+########################################################################################################################
+#                                                NETWORKING                                                            #
+########################################################################################################################
+  VPCMain:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 172.31.0.0/16
@@ -50,7 +53,7 @@ Resources:
     Properties:
       GroupDescription: Allow http to client host
       VpcId:
-        Ref: mainVPC
+        Ref: VPCMain
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -75,7 +78,7 @@ Resources:
         - Key: App
           Value: SnackPoll
       VpcId:
-        Ref: mainVPC
+        Ref: VPCMain
 
   SubnetB:
     Type: AWS::EC2::Subnet
@@ -86,7 +89,7 @@ Resources:
         - Key: App
           Value: SnackPoll
       VpcId:
-        Ref: mainVPC
+        Ref: VPCMain
 
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -102,7 +105,7 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub "${EnvType}-AuroraUserSecret"
+      Name: !Sub "${DatabaseName}-AuroraUserSecret"
       Description: RDS database auto-generated user password
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username": "${DBMasterUserName}"}'
@@ -113,6 +116,10 @@ Resources:
         -
           Key: AppName
           Value: !Ref AppName
+
+########################################################################################################################
+#                                                    RDS                                                               #
+########################################################################################################################
 
   RDSCluster:
     Type: AWS::RDS::DBCluster
@@ -133,6 +140,78 @@ Resources:
         Ref: DBSubnetGroup
       DBSecurityGroups:
         Ref: RDSSecurityGroup
+
+
+
+########################################################################################################################
+#                                                    LAMBDAS                                                           #
+########################################################################################################################
+
+#  TODO: add role, subnet ID from resource,
+# TODO: Add VPC Endpoint with correct policy
+# Add amplify
+  EnterSubmissionFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Runtime: python3.8
+      CodeUri: submission_functions/
+      Handler: enter_submission.lambda_handler
+      Description: 'Puts a new entry in the submission table'
+      MemorySize: 128
+      Timeout: 3
+      Role: 'arn:aws:iam::020413483051:role/RDS-VPC-secrets'
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            Path: /submission
+            Method: POST
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt RDSSecurityGroup.GroupId
+        SubnetIds:
+          - subnet-065f71bbcfb1f7314
+          - subnet-00ede7f62b0faccb0
+      Environment:
+        Variables:
+          DB_REGION: ap-southeast-2
+          RDS_DB_NAME: snackdb
+          SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
+
+  GetSubmissionFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Runtime: python3.8
+      CodeUri: submission_functions/
+      Handler: enter_submission.lambda_handler
+      Description: 'Grabs all entries in the submissions RDS table'
+      MemorySize: 128
+      Timeout: 3
+      Role: 'arn:aws:iam::020413483051:role/RDS-VPC-secrets'
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            Path: /submission
+            Method: GET
+        Api2:
+          Type: Api
+          Properties:
+            Path: /MyResource
+            Method: ANY
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt RDSSecurityGroup.GroupId
+        SubnetIds:
+          - !GetAtt SubnetA.
+          - subnet-065f71bbcfb1f7314
+          - subnet-00ede7f62b0faccb0
+      Environment:
+        Variables:
+          DB_REGION: ap-southeast-2
+          RDS_DB_NAME: snackdb
+          SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
+
 
 
 Outputs:
