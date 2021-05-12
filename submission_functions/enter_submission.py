@@ -26,6 +26,7 @@ def get_db_details(secret_name, db_region_name):
         service_name='secretsmanager',
         region_name=db_region_name
     )
+    print("Connected to secrets manager service")
     try:
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name)
@@ -53,7 +54,7 @@ def get_db_details(secret_name, db_region_name):
             return decoded_binary_secret
 
 
-def conn_db(db_region_name, rds_host, username, password, db_name):
+def conn_db(rds_host, username, password, db_name):
     """
     Establish a connection with the RDS host.
     """
@@ -114,7 +115,9 @@ def lambda_handler(event, context):
     db_region_name = os.environ['DB_REGION']
 
     # Build query
-    sql_query = f"INSERT INTO {table} VALUES ('{snack_name}', 1, 0, '{submitted_by}')"
+    sql_query = f"INSERT INTO {table} VALUES ('{snack_name}', '{submitted_by}')"
+
+    print(f"SQL query: {sql_query}\n, DB: {db_name}\n Secret name: {secret_name}")
 
     # Get secrets
     rds_response = get_db_details(secret_name, db_region_name)
@@ -124,7 +127,7 @@ def lambda_handler(event, context):
     rds_host = rds_dict['host']
     username = rds_dict['username']
     password = rds_dict['password']
-    conn_db(db_region_name, rds_host, username, password, db_name)
+    conn_db(rds_host, username, password, db_name)
     if conn is None:
         return format_response(500, "Can't connect to RDS")
 

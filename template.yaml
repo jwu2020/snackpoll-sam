@@ -8,9 +8,19 @@ Description: >
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    Timeout: 3
-
-
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        DB_REGION: ap-southeast-2
+        RDS_DB_NAME: snackdb
+        SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
+    VpcConfig:
+      SecurityGroupIds:
+        - !GetAtt RDSSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref SubnetB
+        - !Ref SubnetA
 Parameters:
   AppName:
     Description: "Application name"
@@ -27,7 +37,7 @@ Parameters:
   DatabaseName:
     Description: "RDS DB name"
     Type: String
-    Default: SnackRDS
+    Default: submission
   DBMasterUserName:
     AllowedPattern: "[a-zA-Z0-9_]+"
     ConstraintDescription: must be between 1 to 16 alphanumeric characters.
@@ -37,7 +47,26 @@ Parameters:
     Type: String
     Default: admin_user
 
-Resources:
+
+########################################################################################################################
+#                                                Roles & policies                                                      #
+########################################################################################################################
+  RootRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Policies:
+            - SecretsManagerReadWrite
+            - AmazonVPCFullAccess
+            - AWSLambdaVPCAccessExecutionRole
+            - AWSLambda_FullAccess
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: '*'
+                Resource: '*'
+
 ########################################################################################################################
 #                                                NETWORKING                                                            #
 ########################################################################################################################
@@ -117,6 +146,19 @@ Resources:
           Key: AppName
           Value: !Ref AppName
 
+  MySecretResourcePolicy:
+    Type: 'AWS::SecretsManager::ResourcePolicy'
+    Properties:
+      SecretId: !Ref DBSecret
+      ResourcePolicy:
+        Version: 2012-10-17
+        Statement:
+          - Resource: '*'
+            Action: 'secretsmanager:GetSecretValue'
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:RootRole'
+
 ########################################################################################################################
 #                                                    RDS                                                               #
 ########################################################################################################################
@@ -131,6 +173,7 @@ Resources:
       Engine: aurora
       EngineMode: serverless
       EngineVersion: 5.6.10a
+      EnableHttpEndpoint: true
       ScalingConfiguration:
         AutoPause: true
         MaxCapacity: 4
@@ -138,18 +181,17 @@ Resources:
         SecondsUntilAutoPause: 900 # 15 min
       DBSubnetGroupName:
         Ref: DBSubnetGroup
-      DBSecurityGroups:
-        Ref: RDSSecurityGroup
-
-
+      VpcSecurityGroupIds:
+        - !GetAtt RDSSecurityGroup.GroupId
 
 ########################################################################################################################
 #                                                    LAMBDAS                                                           #
 ########################################################################################################################
-
-#  TODO: add role, subnet ID from resource,
+#
+#  TODO: add role
 # TODO: Add VPC Endpoint with correct policy
 # Add amplify
+
   EnterSubmissionFunction:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -157,62 +199,52 @@ Resources:
       CodeUri: submission_functions/
       Handler: enter_submission.lambda_handler
       Description: 'Puts a new entry in the submission table'
-      MemorySize: 128
-      Timeout: 3
-      Role: 'arn:aws:iam::020413483051:role/RDS-VPC-secrets'
       Events:
         Api1:
           Type: Api
           Properties:
             Path: /submission
             Method: POST
-      VpcConfig:
-        SecurityGroupIds:
-          - !GetAtt RDSSecurityGroup.GroupId
-        SubnetIds:
-          - subnet-065f71bbcfb1f7314
-          - subnet-00ede7f62b0faccb0
-      Environment:
-        Variables:
-          DB_REGION: ap-southeast-2
-          RDS_DB_NAME: snackdb
-          SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
+      Policies:
+        - SecretsManagerReadWrite
+        - AmazonVPCFullAccess
+        - AWSLambdaVPCAccessExecutionRole
+        - AWSLambda_FullAccess
 
   GetSubmissionFunction:
     Type: 'AWS::Serverless::Function'
     Properties:
       Runtime: python3.8
       CodeUri: submission_functions/
-      Handler: enter_submission.lambda_handler
+      Handler: get_submissions.lambda_handler
       Description: 'Grabs all entries in the submissions RDS table'
-      MemorySize: 128
-      Timeout: 3
-      Role: 'arn:aws:iam::020413483051:role/RDS-VPC-secrets'
       Events:
         Api1:
           Type: Api
           Properties:
             Path: /submission
             Method: GET
-        Api2:
-          Type: Api
-          Properties:
-            Path: /MyResource
-            Method: ANY
-      VpcConfig:
-        SecurityGroupIds:
-          - !GetAtt RDSSecurityGroup.GroupId
-        SubnetIds:
-          - !GetAtt SubnetA.
-          - subnet-065f71bbcfb1f7314
-          - subnet-00ede7f62b0faccb0
-      Environment:
-        Variables:
-          DB_REGION: ap-southeast-2
-          RDS_DB_NAME: snackdb
-          SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
 
+      Policies:
+        - SecretsManagerReadWrite
+        - AmazonVPCFullAccess
+        - AWSLambdaVPCAccessExecutionRole
+        - AWSLambda_FullAccess
 
+#  VPCSMEndpoint:
+#    Type: 'AWS::EC2::VPCEndpoint'
+#    Properties:
+#      PolicyDocument:
+#        Version: 2012-10-17
+#        Statement:
+#          - Effect: Allow
+#            Principal: '*'
+#            Action:
+#              - '*'
+#            Resource:
+#              - '*'
+#      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+#      VpcId: !Ref VPCMain
 
 Outputs:
   StackName:
