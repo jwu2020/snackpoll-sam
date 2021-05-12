@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-app
+
+  Sample SAM Template for sam-app
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+
+Parameters:
+  AppName:
+    Description: "Application name"
+    Type: String
+    Default: SnackVotingPoll
+  EnvType:
+    Description: "Environment type (eg, dev, qa, prod)"
+    Type: String
+    Default: dev
+  DBClusterName:
+    Description: "RDS Cluster name"
+    Type: String
+    Default: SnackRDSCluster
+  DatabaseName:
+    Description: "RDS DB name"
+    Type: String
+    Default: SnackRDS
+  DBMasterUserName:
+    AllowedPattern: "[a-zA-Z0-9_]+"
+    ConstraintDescription: must be between 1 to 16 alphanumeric characters.
+    Description: The database admin account user name, between 1 to 16 alphanumeric characters.
+    MaxLength: '16'
+    MinLength: '1'
+    Type: String
+    Default: admin_user
+
+Resources:
+  mainVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.31.0.0/16
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId:
+        Ref: mainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 149.167.144.211/32
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-southeast-2a
+      CidrBlock: 172.31.0.0/24
+      Tags:
+        - Key: App
+          Value: SnackPoll
+      VpcId:
+        Ref: mainVPC
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-southeast-2b
+      CidrBlock: 172.31.1.0/24
+      Tags:
+        - Key: App
+          Value: SnackPoll
+      VpcId:
+        Ref: mainVPC
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+      SubnetIds:
+        - !Ref SubnetB
+        - !Ref SubnetA
+      Tags:
+        - Key: App
+          Value: Snack Poll Stack
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${EnvType}-AuroraUserSecret"
+      Description: RDS database auto-generated user password
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBMasterUserName}"}'
+        GenerateStringKey: "password"
+        PasswordLength: 30
+        ExcludeCharacters: '"@/\'
+      Tags:
+        -
+          Key: AppName
+          Value: !Ref AppName
+
+  RDSCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: !Ref DBClusterName
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref DBSecret, ':SecretString:password}}' ]]
+      DatabaseName: !Ref DatabaseName
+      Engine: aurora
+      EngineMode: serverless
+      EngineVersion: 5.6.10a
+      ScalingConfiguration:
+        AutoPause: true
+        MaxCapacity: 4
+        MinCapacity: 1
+        SecondsUntilAutoPause: 900 # 15 min
+      DBSubnetGroupName:
+        Ref: DBSubnetGroup
+      DBSecurityGroups:
+        Ref: RDSSecurityGroup
+
+
+Outputs:
+  StackName:
+    Description: Aurora Stack Name
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub ${AWS::StackName}-StackName
+
+  DatabaseName:
+    Description: Aurora Database Name
+    Value: !Ref DatabaseName
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseName
+
+  DatabaseClusterArn:
+    Description: Aurora Cluster ARN
+    Value: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:${DBClusterName}
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseClusterArn
+
+  DatabaseSecretArn:
+    Description: Aurora Secret ARN
+    Value: !Ref DBSecret
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseSecretArn
+
+  DatabaseClusterID:
+    Description: Aurora Cluster ID
+    Value: !Ref RDSCluster
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseClusterID
+
+  AuroraDbURL:
+    Description: Aurora Database URL
+    Value: !GetAtt RDSCluster.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseURL
+
+  DatabaseMasterUserName:
+    Description: Aurora Database User
+    Value: !Ref DBMasterUserName
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseMasterUserName
