@@ -225,7 +225,16 @@ Resources:
 ##########################################################################################################################
 ###                                                    LAMBDAS                                                           #
 ##########################################################################################################################
-### TODO: Add amplify
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'POST, GET'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "*"
+        MaxAge: "'600'"
+        AllowCredentials: True
 
   GetSubmissionFunction:
     Type: 'AWS::Serverless::Function'
@@ -246,6 +255,9 @@ Resources:
           Properties:
             Path: /submission
             Method: GET
+            RestApiId:
+              Ref: ApiGatewayApi
+
       Role: !GetAtt RootRole.Arn
       Environment:
         Variables:
@@ -299,6 +311,72 @@ Resources:
         - !Ref SubnetA
       SecurityGroupIds:
         - !GetAtt RDSSecurityGroup.GroupId
+        -
+#########################################################################################################################
+##                                                     Amplify                                                          #
+#########################################################################################################################
+
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - amplify.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Amplify
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "amplify:*"
+                Resource: "*"
+
+  AmplifyApp:
+    Type: "AWS::Amplify::App"
+    Properties:
+      Name: Serverless Snack Poll
+      Repository: https://github.com/jwu2020/serverless-react
+      Description: React Serverless App
+      OauthToken: !Ref OauthToken
+      BuildSpec: |-
+        version: 0.1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: build
+            files:
+              - '**/*'
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
+      EnvironmentVariables:
+        - Name: REACT_APP_API_GATEWAY_BASE_URL
+          Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      BranchName: master
+      AppId: !GetAtt AmplifyApp.AppId
+      Description: Master Branch
+      EnableAutoBuild: true
+      Tags:
+        - Key: Name
+          Value: App-master
+        - Key: Branch
+          Value: master
+
+
 
 Outputs:
   StackName:
@@ -349,3 +427,10 @@ Outputs:
     Value: !Ref DBMasterUserName
     Export:
       Name: !Sub ${AWS::StackName}-DatabaseMasterUserName
+
+  ProdDataEndpoint:
+    Description: "API Prod stage endpoint"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  AmplifyMasterBranchUrl:
+    Value: !GetAtt AmplifyBranch.BranchName
