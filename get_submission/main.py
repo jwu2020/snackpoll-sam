@@ -5,13 +5,9 @@ import json
 import os
 import pymysql
 import logging
-import time
-import random
-import logging
 import traceback
 
 conn = None
-
 
 def get_db_details(secret_name, db_region_name):
     """
@@ -51,7 +47,7 @@ def get_db_details(secret_name, db_region_name):
             return decoded_binary_secret
 
 
-def conn_db(db_region_name, rds_host, username, password, db_name):
+def conn_rdb(rds_host, username, password, db_name):
     """
     Establish a connection with the RDS host.
     """
@@ -60,25 +56,23 @@ def conn_db(db_region_name, rds_host, username, password, db_name):
     print("In Open connection")
 
     try:
-        if (conn is None):
-            print(rds_host, username, password, db_name)
-            conn = pymysql.connect(
-                rds_host, user=username, passwd=password, db=db_name, connect_timeout=15)
-            print(conn)
-        elif (not conn.open):
-            print(conn.open)
-            conn = pymysql.connect(
-                rds_host, user=username, passwd=password, db=db_name, connect_timeout=15)
+        conn = pymysql.connect(
+            host=rds_host,
+            user=username,
+            password=password,
+            db=db_name,
+            connect_timeout=15)
 
     except Exception as e:
+        traceback.print_stack()
         print(e)
         print("ERROR: Unexpected error: Could not connect to MySql instance.")
+        return None
 
 
-def run_query(query):
+def get_query(query):
     """
-    Run a query on RDS
-    Return: List, each entry is an one SQL result.
+    Run a get query on RDS
     """
     result = []
     try:
@@ -87,17 +81,33 @@ def run_query(query):
             cur.execute(query)
             for row in cur:
                 result.append(row)
+
+        # conn.cursor.close()
     except Exception as e:
         # Error while opening connection or processing
         print(e)
     return result
 
 
+def put_query(query):
+    """
+    Run a put query on RDS
+    """
+    try:
+        mycursor = conn.cursor()
+        mycursor.execute(query)
+        conn.commit()
+        mycursor.close()
+        return {"code": 200, "message": "Updated database successfully"}
+    except Exception as e:
+        # Error while opening connection or processing
+        print(e)
+        return {"code": 500, "message": f"Could not update database successfully. Error: {e}"}
+
+
 def enrich_list(headers_list, result_list):
     """
     Combine the headers list and the list of sql results
-
-    Return: list of dictionaries with SQL cells mapped to their headers
     """
 
     if len(headers_list) != len(result_list[0]):
@@ -115,6 +125,25 @@ def enrich_list(headers_list, result_list):
     return result_dict
 
 
+def check_table_exists(db_name, table_name):
+    sql_query = f"SELECT * FROM information_schema.tables WHERE table_schema = '{db_name}'  AND table_name = '{table_name}' LIMIT 1;"
+    res = get_query(sql_query)
+
+    # If table doesn't exist, create and populate table
+    try:
+        if not res:
+            create_table_query = f"CREATE TABLE {table_name} (name VARCHAR(100), upvote INT, downvote INT, submitted_by VARCHAR(100));"
+            get_query(create_table_query)
+
+            populate_table_query = f"INSERT INTO {table_name} VALUES ('Bananas', 1, 0, 'Jess');"
+            put_query(populate_table_query)
+
+        return True
+    except Exception as e:
+        traceback.print_stack()
+        print(e)
+        return False
+
 def format_response(code, body):
     return {
         "statusCode": code,
@@ -131,48 +160,47 @@ def format_response(code, body):
 
 def lambda_handler(event, context):
     print(event, context)
-    logging.basicConfig(level=logging.INFO)
-
-    # sql_query = event['sql_query']
-    # table = event['table']
 
     sql_query = event['queryStringParameters']['sql_query']
     table = event['queryStringParameters']['table']
-
-    print(f"sql: {sql_query}")
-    print(f"table: {table}")
     db_name = os.environ['RDS_DB_NAME']
     secret_name = os.environ['SECRET_NAME']
     db_region_name = os.environ['DB_REGION']
+    rds_host = os.environ['RDS_HOST']
 
     # Get secrets
     rds_response = get_db_details(secret_name, db_region_name)
     if rds_response is None:
         return format_response(500, "Can't connect to Secrets Manager")
     rds_dict = json.loads(rds_response)
-    rds_host = rds_dict['host']
     username = rds_dict['username']
     password = rds_dict['password']
-    conn_db(db_region_name, rds_host, username, password, db_name)
+    conn_rdb(rds_host, username, password, db_name)
+
     if conn is None:
         return format_response(500, "Can't connect to RDS")
 
     print("SUCCESS: Connection to RDS MySQL instance succeeded")
 
+    # Set up table if it doesn't exist yet
+    res = check_table_exists(db_name, table)
+    if not res:
+        return format_response(500, "Can't initialise table in RDS")
+
     # Run query
-    sql_res = run_query(sql_query)
+    sql_res = get_query(sql_query)
 
     if table != "":
         header_query = f"SELECT `COLUMN_NAME` FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE `TABLE_SCHEMA`='{db_name}' AND `TABLE_NAME`='{table}';"
-        headers = run_query(header_query)
+        headers = get_query(header_query)
         sql_res = enrich_list(headers, sql_res)
 
         logging.info(f'Headers result: {headers}')
-    print(f'SQL Query result: {sql_res}')
 
+    print(f'SQL Query result: {sql_res}')
     print("Closing Connection")
-    if (conn is not None and conn.open):
-        conn.close()
+
+    conn.close()
 
     return format_response(200, sql_res)
 

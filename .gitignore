@@ -102,11 +102,9 @@ fabric.properties
 
 # *.iml
 # modules.xml
-# .idea/misc.xml
+ .idea/*
+ .aws-sam/*
 # *.ipr
-
-# Sonarlint plugin
-.idea/sonarlint
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

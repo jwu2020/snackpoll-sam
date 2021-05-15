@@ -13,7 +13,6 @@ Globals:
     Environment:
       Variables:
         DB_REGION: ap-southeast-2
-        RDS_DB_NAME: snackdb
         SECRET_NAME: !Sub "${DatabaseName}-AuroraUserSecret"
     VpcConfig:
       SecurityGroupIds:
@@ -51,21 +50,38 @@ Parameters:
 ########################################################################################################################
 #                                                Roles & policies                                                      #
 ########################################################################################################################
+Resources:
+
   RootRole:
     Type: 'AWS::IAM::Role'
     Properties:
+      RoleName: 'RootRole'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - lambda.amazonaws.com
+                - secretsmanager.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+        - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
       Policies:
-            - SecretsManagerReadWrite
-            - AmazonVPCFullAccess
-            - AWSLambdaVPCAccessExecutionRole
-            - AWSLambda_FullAccess
-        - PolicyName: root
+        - PolicyName: rds-iamauth
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action: '*'
+                Action: 'rds-db:connect'
                 Resource: '*'
+
+
 
 ########################################################################################################################
 #                                                NETWORKING                                                            #
@@ -74,8 +90,8 @@ Parameters:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 172.31.0.0/16
-      EnableDnsSupport: 'false'
-      EnableDnsHostnames: 'false'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
 
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -89,14 +105,39 @@ Parameters:
           ToPort: 80
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          CidrIp: 149.167.144.211/32
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: AppName
+          Value: !Ref AppName
+
+  RDSBaseIngress:
+     Type: 'AWS::EC2::SecurityGroupIngress'
+     Properties:
+        GroupId: !Ref RDSSecurityGroup
+        IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        SourceSecurityGroupId: !GetAtt RDSSecurityGroup.GroupId
+
+  RDSBaseEgress:
+     Type: 'AWS::EC2::SecurityGroupEgress'
+     Properties:
+        GroupId: !Ref RDSSecurityGroup
+        IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        DestinationSecurityGroupId: !GetAtt RDSSecurityGroup.GroupId
 
   SubnetA:
     Type: AWS::EC2::Subnet
@@ -141,10 +182,6 @@ Parameters:
         GenerateStringKey: "password"
         PasswordLength: 30
         ExcludeCharacters: '"@/\'
-      Tags:
-        -
-          Key: AppName
-          Value: !Ref AppName
 
   MySecretResourcePolicy:
     Type: 'AWS::SecretsManager::ResourcePolicy'
@@ -157,11 +194,12 @@ Parameters:
             Action: 'secretsmanager:GetSecretValue'
             Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:RootRole'
+              AWS: !GetAtt RootRole.Arn
 
-########################################################################################################################
-#                                                    RDS                                                               #
-########################################################################################################################
+
+#########################################################################################################################
+##                                                    RDS                                                               #
+#########################################################################################################################
 
   RDSCluster:
     Type: AWS::RDS::DBCluster
@@ -184,39 +222,23 @@ Parameters:
       VpcSecurityGroupIds:
         - !GetAtt RDSSecurityGroup.GroupId
 
-########################################################################################################################
-#                                                    LAMBDAS                                                           #
-########################################################################################################################
-#
-#  TODO: add role
-# TODO: Add VPC Endpoint with correct policy
-# Add amplify
-
-  EnterSubmissionFunction:
-    Type: 'AWS::Serverless::Function'
-    Properties:
-      Runtime: python3.8
-      CodeUri: submission_functions/
-      Handler: enter_submission.lambda_handler
-      Description: 'Puts a new entry in the submission table'
-      Events:
-        Api1:
-          Type: Api
-          Properties:
-            Path: /submission
-            Method: POST
-      Policies:
-        - SecretsManagerReadWrite
-        - AmazonVPCFullAccess
-        - AWSLambdaVPCAccessExecutionRole
-        - AWSLambda_FullAccess
+##########################################################################################################################
+###                                                    LAMBDAS                                                           #
+##########################################################################################################################
+### TODO: Add amplify
 
   GetSubmissionFunction:
     Type: 'AWS::Serverless::Function'
+    VpcConfig:
+      SecurityGroupIds:
+        - !GetAtt RDSSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref SubnetB
+        - !Ref SubnetA
     Properties:
       Runtime: python3.8
-      CodeUri: submission_functions/
-      Handler: get_submissions.lambda_handler
+      CodeUri: get_submission/
+      Handler: main.lambda_handler
       Description: 'Grabs all entries in the submissions RDS table'
       Events:
         Api1:
@@ -224,27 +246,59 @@ Parameters:
           Properties:
             Path: /submission
             Method: GET
+      Role: !GetAtt RootRole.Arn
+      Environment:
+        Variables:
+          RDS_DB_NAME: !Ref DatabaseName
+          RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
 
-      Policies:
-        - SecretsManagerReadWrite
-        - AmazonVPCFullAccess
-        - AWSLambdaVPCAccessExecutionRole
-        - AWSLambda_FullAccess
 
-#  VPCSMEndpoint:
-#    Type: 'AWS::EC2::VPCEndpoint'
-#    Properties:
-#      PolicyDocument:
-#        Version: 2012-10-17
-#        Statement:
-#          - Effect: Allow
-#            Principal: '*'
-#            Action:
-#              - '*'
-#            Resource:
-#              - '*'
-#      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
-#      VpcId: !Ref VPCMain
+  EnterSubmissionFunction:
+    Type: 'AWS::Serverless::Function'
+    VpcConfig:
+      SecurityGroupIds:
+        - !GetAtt RDSSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref SubnetB
+        - !Ref SubnetA
+    Properties:
+      Runtime: python3.8
+      CodeUri: enter_submission/
+      Handler: main.lambda_handler
+      Description: 'Puts a new entry in the submission table'
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            Path: /submission
+            Method: POST
+      Role: !GetAtt RootRole.Arn
+      Environment:
+        Variables:
+          RDS_DB_NAME: !Ref DatabaseName
+          RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
+
+  VPCSMEndpoint:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcEndpointType: 'Interface'
+      PrivateDnsEnabled: 'true'
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - '*'
+            Resource:
+              - '*'
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcId: !Ref VPCMain
+      SubnetIds:
+        - !Ref SubnetB
+        - !Ref SubnetA
+      SecurityGroupIds:
+        - !GetAtt RDSSecurityGroup.GroupId
 
 Outputs:
   StackName:
@@ -252,6 +306,13 @@ Outputs:
     Value: !Ref AWS::StackName
     Export:
       Name: !Sub ${AWS::StackName}-StackName
+
+  rolearn:
+    Description: RoleARN
+    Value: !Ref RootRole
+    Export:
+      Name: !Sub ${AWS::StackName}-RoleARN
+
 
   DatabaseName:
     Description: Aurora Database Name
