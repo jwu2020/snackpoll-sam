@@ -1,9 +1,11 @@
 # Serverless Snack Poll Results
 
 ###1. Overview
+
 This project contains the source code and supporting files for a 3-tier serverless application built in AWS and deployed using AWS's SAM (Serverless Application Model) cli.
 
 ###2. Set up
+
 ####I. INSTALL DEPENDENCIES
 1. You will need an AWS account. If you need to set one up, see aws.amazon.com and choose **Create an AWS Account.**
 2. The IAM user you use with SAM must have sufficient permission to make AWS service calls to and manage the services that will be listed down below. A sure-fire way to do this is by granting administrator privileges to your IAM user 
