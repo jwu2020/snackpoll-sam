@@ -11,7 +11,7 @@ This project contains the source code and supporting files for a 3-tier serverle
 2. The IAM user you use with SAM must have sufficient permission to make AWS service calls to and manage the services that will be listed down below. A sure-fire way to do this is by granting administrator privileges to your IAM user 
 3. Install Docker
 4. Install SAM cli. Go [here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-linux.html) for step by step instructions.
-
+5. Personal Access token from this account (Request is required)
 ####II. BUILD
 
 To build, run the following:
@@ -21,7 +21,7 @@ sam build --use-container
 
 ####III. DEPLOY
 
-To deploy, run the following command, and replace the OAuthToken placeholder with the provided Personal Access token generated on Github. (Request from this account if you do not have a token)
+To deploy, run the following command, and replace the OAuthToken placeholder with the provided Personal Access token generated on Github.
 ```bash
 sam deploy --guided  --capabilities CAPABILITY_NAMED_IAM 
 ```
