@@ -20,6 +20,13 @@ Globals:
       SubnetIds:
         - !Ref SubnetB
         - !Ref SubnetA
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,OPTIONS'"
+      AllowHeaders: "'content-type'"
+      AllowOrigin: "'*'"
+      AllowCredentials: "'*'"
+
 Parameters:
   AppName:
     Description: "Application name"
@@ -52,10 +59,10 @@ Parameters:
 ########################################################################################################################
 Resources:
 
-  RootRole:
+  SnackServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: 'RootRole'
+      RoleName: 'SnackServiceRole'
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -194,13 +201,13 @@ Resources:
             Action: 'secretsmanager:GetSecretValue'
             Effect: Allow
             Principal:
-              AWS: !GetAtt RootRole.Arn
+              AWS: !GetAtt SnackServiceRole.Arn
 
 
 #########################################################################################################################
 ##                                                    RDS                                                               #
 #########################################################################################################################
-
+#
   RDSCluster:
     Type: AWS::RDS::DBCluster
     Properties:
@@ -229,12 +236,7 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
-      Cors:
-        AllowMethods: "'POST, GET'"
-        AllowHeaders: "'*'"
-        AllowOrigin: "*"
-        MaxAge: "'600'"
-        AllowCredentials: True
+
 
   GetSubmissionFunction:
     Type: 'AWS::Serverless::Function'
@@ -257,39 +259,39 @@ Resources:
             Method: GET
             RestApiId:
               Ref: ApiGatewayApi
-
-      Role: !GetAtt RootRole.Arn
+#
+      Role: !GetAtt SnackServiceRole.Arn
       Environment:
         Variables:
           RDS_DB_NAME: !Ref DatabaseName
           RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
-
-
-  EnterSubmissionFunction:
-    Type: 'AWS::Serverless::Function'
-    VpcConfig:
-      SecurityGroupIds:
-        - !GetAtt RDSSecurityGroup.GroupId
-      SubnetIds:
-        - !Ref SubnetB
-        - !Ref SubnetA
-    Properties:
-      Runtime: python3.8
-      CodeUri: enter_submission/
-      Handler: main.lambda_handler
-      Description: 'Puts a new entry in the submission table'
-      Events:
-        Api1:
-          Type: Api
-          Properties:
-            Path: /submission
-            Method: POST
-      Role: !GetAtt RootRole.Arn
-      Environment:
-        Variables:
-          RDS_DB_NAME: !Ref DatabaseName
-          RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
-
+#
+#
+#  EnterSubmissionFunction:
+#    Type: 'AWS::Serverless::Function'
+#    VpcConfig:
+#      SecurityGroupIds:
+#        - !GetAtt RDSSecurityGroup.GroupId
+#      SubnetIds:
+#        - !Ref SubnetB
+#        - !Ref SubnetA
+#    Properties:
+#      Runtime: python3.8
+#      CodeUri: enter_submission/
+#      Handler: main.lambda_handler
+#      Description: 'Puts a new entry in the submission table'
+#      Events:
+#        Api1:
+#          Type: Api
+#          Properties:
+#            Path: /submission
+#            Method: POST
+#      Role: !GetAtt SnackServiceRole.Arn
+#      Environment:
+#        Variables:
+#          RDS_DB_NAME: !Ref DatabaseName
+#          RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
+#
   VPCSMEndpoint:
     Type: 'AWS::EC2::VPCEndpoint'
     Properties:
@@ -311,10 +313,10 @@ Resources:
         - !Ref SubnetA
       SecurityGroupIds:
         - !GetAtt RDSSecurityGroup.GroupId
-        -
-#########################################################################################################################
-##                                                     Amplify                                                          #
-#########################################################################################################################
+#
+##########################################################################################################################
+###                                                     Amplify                                                          #
+##########################################################################################################################
 
   AmplifyRole:
     Type: AWS::IAM::Role
@@ -343,7 +345,7 @@ Resources:
       Name: Serverless Snack Poll
       Repository: https://github.com/jwu2020/serverless-react
       Description: React Serverless App
-      OauthToken: !Ref OauthToken
+      OauthToken: "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"
       BuildSpec: |-
         version: 0.1
         frontend:
@@ -361,7 +363,7 @@ Resources:
       IAMServiceRole: !GetAtt AmplifyRole.Arn
       EnvironmentVariables:
         - Name: REACT_APP_API_GATEWAY_BASE_URL
-          Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+          Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
 
   AmplifyBranch:
     Type: AWS::Amplify::Branch
@@ -387,7 +389,7 @@ Outputs:
 
   rolearn:
     Description: RoleARN
-    Value: !Ref RootRole
+    Value: !Ref SnackServiceRole
     Export:
       Name: !Sub ${AWS::StackName}-RoleARN
 
@@ -430,7 +432,7 @@ Outputs:
 
   ProdDataEndpoint:
     Description: "API Prod stage endpoint"
-    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/prod/"
 
   AmplifyMasterBranchUrl:
     Value: !GetAtt AmplifyBranch.BranchName
