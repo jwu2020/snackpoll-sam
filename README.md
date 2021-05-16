@@ -25,10 +25,23 @@ sam deploy --guided  --capabilities CAPABILITY_NAMED_IAM
 ```
 
 ####IV. CONFIG
+Enable CORs.
+1. Go to API Gateway and navigate into the API created in this project. 
+2. Click /get on the left hand column, and then method response. Add a http status of 200, then in that same row, add these headers:
+- Access-Control-Allow-Headers	
+- Access-Control-Allow-Methods	
+- Access-Control-Allow-Origin	
+
+3. Go back to the previous page and then navigate into Integration Request.
+4. Untick Use Lambda Proxy integration. 
+5. Enable Cors, then go back and tick Use Lambda Proxy integration.
+6. Go to actions in the left column and click Deploy the API. Select the prod stage.
+
+Trigger Amplify Build
 1. Navigate to the Amplify AWS Service in your AWS console.
 2. Click on tile of the app that was created as part of this project.
 3. Click build. This will trigger Amplify to build and deploy the react web app.
-4. Go to API Gateway and enable CORS
+
 
 
 ###3. System Architecture
