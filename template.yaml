@@ -1,11 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  sam-app
-
-  Sample SAM Template for sam-app
-
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Description: Template for a humble Snack Vote Poll app.
 Globals:
   Function:
     Timeout: 10
@@ -52,13 +47,14 @@ Parameters:
     MinLength: '1'
     Type: String
     Default: admin_user
-
+  GitPersonalToken:
+    Description: Personal token
+    Type: String
 
 ########################################################################################################################
 #                                                Roles & policies                                                      #
 ########################################################################################################################
 Resources:
-
   SnackServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -87,8 +83,6 @@ Resources:
               - Effect: Allow
                 Action: 'rds-db:connect'
                 Resource: '*'
-
-
 
 ########################################################################################################################
 #                                                NETWORKING                                                            #
@@ -205,9 +199,9 @@ Resources:
 
 
 #########################################################################################################################
-##                                                    RDS                                                               #
+#                                                    RDS                                                               #
 #########################################################################################################################
-#
+
   RDSCluster:
     Type: AWS::RDS::DBCluster
     Properties:
@@ -229,14 +223,13 @@ Resources:
       VpcSecurityGroupIds:
         - !GetAtt RDSSecurityGroup.GroupId
 
-##########################################################################################################################
-###                                                    LAMBDAS                                                           #
-##########################################################################################################################
+########################################################################################################################
+#                                                    LAMBDAS                                                           #
+########################################################################################################################
   ApiGatewayApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
-
 
   GetSubmissionFunction:
     Type: 'AWS::Serverless::Function'
@@ -259,39 +252,13 @@ Resources:
             Method: GET
             RestApiId:
               Ref: ApiGatewayApi
-#
+
       Role: !GetAtt SnackServiceRole.Arn
       Environment:
         Variables:
           RDS_DB_NAME: !Ref DatabaseName
           RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
-#
-#
-#  EnterSubmissionFunction:
-#    Type: 'AWS::Serverless::Function'
-#    VpcConfig:
-#      SecurityGroupIds:
-#        - !GetAtt RDSSecurityGroup.GroupId
-#      SubnetIds:
-#        - !Ref SubnetB
-#        - !Ref SubnetA
-#    Properties:
-#      Runtime: python3.8
-#      CodeUri: enter_submission/
-#      Handler: main.lambda_handler
-#      Description: 'Puts a new entry in the submission table'
-#      Events:
-#        Api1:
-#          Type: Api
-#          Properties:
-#            Path: /submission
-#            Method: POST
-#      Role: !GetAtt SnackServiceRole.Arn
-#      Environment:
-#        Variables:
-#          RDS_DB_NAME: !Ref DatabaseName
-#          RDS_HOST: !GetAtt RDSCluster.Endpoint.Address
-#
+
   VPCSMEndpoint:
     Type: 'AWS::EC2::VPCEndpoint'
     Properties:
@@ -313,10 +280,10 @@ Resources:
         - !Ref SubnetA
       SecurityGroupIds:
         - !GetAtt RDSSecurityGroup.GroupId
-#
-##########################################################################################################################
-###                                                     Amplify                                                          #
-##########################################################################################################################
+
+#########################################################################################################################
+#                                                      Amplify                                                          #
+#########################################################################################################################
 
   AmplifyRole:
     Type: AWS::IAM::Role
@@ -345,7 +312,7 @@ Resources:
       Name: Serverless Snack Poll
       Repository: https://github.com/jwu2020/serverless-react
       Description: React Serverless App
-      OauthToken: "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"
+      OauthToken: !Ref GitPersonalToken
       BuildSpec: |-
         version: 0.1
         frontend:
@@ -378,8 +345,6 @@ Resources:
         - Key: Branch
           Value: master
 
-
-
 Outputs:
   StackName:
     Description: Aurora Stack Name
@@ -392,7 +357,6 @@ Outputs:
     Value: !Ref SnackServiceRole
     Export:
       Name: !Sub ${AWS::StackName}-RoleARN
-
 
   DatabaseName:
     Description: Aurora Database Name

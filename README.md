@@ -1,130 +1,70 @@
-# sam-app
+# Serverless Snack Poll Results
 
-This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
+###1. Overview
+This project contains the source code and supporting files for a 3-tier serverless application built in AWS and deployed using AWS's SAM (Serverless Application Model) cli.
 
-- hello_world - Code for the application's Lambda function.
-- events - Invocation events that you can use to invoke the function.
-- tests - Unit tests for the application code. 
-- template.yaml - A template that defines the application's AWS resources.
+###2. Set up
+####I. INSTALL DEPENDENCIES
+1. You will need an AWS account. If you need to set one up, see aws.amazon.com and choose **Create an AWS Account.**
+2. The IAM user you use with SAM must have sufficient permission to make AWS service calls to and manage the services that will be listed down below. A sure-fire way to do this is by granting administrator privileges to your IAM user 
+3. Install Docker
+4. Install SAM cli. Go [here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-linux.html) for step by step instructions.
 
-The application uses several AWS resources, including Lambda functions and an API Gateway API. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
+####II. BUILD
 
-If you prefer to use an integrated development environment (IDE) to build and test your application, you can use the AWS Toolkit.  
-The AWS Toolkit is an open source plug-in for popular IDEs that uses the SAM CLI to build and deploy serverless applications on AWS. The AWS Toolkit also adds a simplified step-through debugging experience for Lambda function code. See the following links to get started.
-
-* [CLion](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [GoLand](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [IntelliJ](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [WebStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [Rider](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PhpStorm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [PyCharm](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [RubyMine](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [DataGrip](https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/welcome.html)
-* [VS Code](https://docs.aws.amazon.com/toolkit-for-vscode/latest/userguide/welcome.html)
-* [Visual Studio](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/welcome.html)
-
-## Deploy the sample application
-
-The Serverless Application Model Command Line Interface (SAM CLI) is an extension of the AWS CLI that adds functionality for building and testing Lambda applications. It uses Docker to run your functions in an Amazon Linux environment that matches Lambda. It can also emulate your application's build environment and API.
-
-To use the SAM CLI, you need the following tools.
-
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* [Python 3 installed](https://www.python.org/downloads/)
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
-
-To build and deploy your application for the first time, run the following in your shell:
-
+To build, run the following:
 ```bash
 sam build --use-container
-sam deploy --guided
 ```
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
+####III. DEPLOY
 
-* **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
-* **AWS Region**: The AWS region you want to deploy your app to.
-* **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
-
-You can find your API Gateway Endpoint URL in the output values displayed after deployment.
-
-## Use the SAM CLI to build and test locally
-
-Build your application with the `sam build --use-container` command.
-
+To deploy, run the following command, and replace the OAuthToken placeholder with the provided Personal Access token generated on Github. (Request from this account if you do not have a token)
 ```bash
-sam-app$ sam build --use-container
+sam deploy --guided  --capabilities CAPABILITY_NAMED_IAM 
 ```
 
-The SAM CLI installs dependencies defined in `hello_world/requirements.txt`, creates a deployment package, and saves it in the `.aws-sam/build` folder.
+####IV. CONFIG
+1. Navigate to the Amplify AWS Service in your AWS console.
+2. Click on tile of the app that was created as part of this project.
+3. Click build. This will trigger Amplify to build and deploy the react web app.
+4. Go to API Gateway and enable CORS
 
-Test a single function by invoking it directly with a test event. An event is a JSON document that represents the input that the function receives from the event source. Test events are included in the `events` folder in this project.
 
-Run functions locally and invoke them with the `sam local invoke` command.
+###3. System Architecture
+This project is a simple application, displaying a summary of a team’s Snack submissions and vote scores. The application consists of 3 main components:
+1.	The snack submission and vote data are stored in a RDS Database
+2.	The ‘logic layer’ which queries the database and formats the data is completed by AWS Lambdas, and 
+3.	The formatted data is displayed using a React web framework deployed using AWS Amplify.
 
-```bash
-sam-app$ sam local invoke HelloWorldFunction --event events/event.json
-```
+The services were designed as shown in Fig 1. Below (simple). For a more in-depth architecture diagram, see the next section.
 
-The SAM CLI can also emulate your application's API. Use the `sam local start-api` to run the API locally on port 3000.
+![GitHub Logo](images/HighLevelArch.png)
 
-```bash
-sam-app$ sam local start-api
-sam-app$ curl http://localhost:3000/
-```
+###4. Design decisions
+All the services that were selected are managed, serverless services for it’s inherent scalability, cost effectiveness, and support for CICD. The design behind the system architecture will be covered starting from the database tier to the presentation layer. 
 
-The SAM CLI reads the application template to determine the API's routes and the functions that they invoke. The `Events` property on each function's definition includes the route and method for each path.
+![GitHub Logo](images/AWSArch.png)
 
-```yaml
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: get
-```
+####I. DB
+The MySQL database utilizes the Aurora MySQL Cluster. This was selected for several reasons:
+-	Scalability: The cluster scales up and down according to data usage by setting up a minimum and maximum ACU (Aurora Capacity Unit). In this case, it was set to 1-4 ACU’s.
+-	Fault tolerant: Can enable multiple AZ’s, each containing a copy. Uses failover mechanism when primary instance is affected, promoting one of the replica instances.
+-	Serverless: easy to set up. 
+-	Users are billed per instance hour consumed.
 
-## Add a resource to your application
-The application template uses AWS Serverless Application Model (AWS SAM) to define application resources. AWS SAM is an extension of AWS CloudFormation with a simpler syntax for configuring common serverless application resources such as functions, triggers, and APIs. For resources not included in [the SAM specification](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md), you can use standard [AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-template-resource-type-ref.html) resource types.
+####II. Logic
+-	AWS Lambda, a serverless compute service, communicates with RDS directly, being in the same VPC & Subnets. Lambda charges are based on the number of requests, and the duration of the request processing.
+-	This seamlessly integrates with Secrets Manager to retrieve MySQL AuroraDB credentials via a VPC endpoint. Secrets Manager was used as a secure key storage as it not only stores, but also randomly generates passwords, rotates and manages different types of secrets. As Secrets Manager lies outside the VPC lambda resides in, a VPC endpoint is used to directly connect the VPC with Secrets without leaving the AWS Network. VPC Endpoint is powered by AWS PrivateLink which uses private IP addresses and security groups within the Amazon VPC, removing the need to set up internet gateways, NAT gateways, route tables, firewalls, or whitelisting. VPC Endpoint charges by the hour consumed. Secret Manager charged $0.40 per secret per month, and an additional $0.05 for every 10,000 API calls.
+-	The AWS Lambda functions are exposed to the internet via API Gateway. API gateway is used to publish and manage the RESTful API for this app, as well as handling traffic management, CORS support, throttling, monitoring, versioning and testing. This pricing model for this application begins at $0.90 per million requests at the highest tier and decreases as your API usage increases.
 
-## Fetch, tail, and filter Lambda function logs
+####III. Presentation
+-	Amplify is used to quickly deploy a React app which display data retrieved from the RDS via API Gateway & Lambda. This is suitable for quickly deploying Single Page Apps in just a few minutes with a git-based workflow. This service will re-provision, build and deploy the associated [repo](https://github.com/jwu2020/serverless-react) when any updates to the repo are pushed through a webhook. Amplify has a lot more features that can be used such as set up storage, APIs, PR reviews, Authentication, so forth.  It costs $0.01 minutes for per build minute beyond the Free Tier (1000 build minutes/month free during your 12-month Free Tier term), so it is important long term to consider how to reduce build time, and the frequency of updates. 
 
-To simplify troubleshooting, SAM CLI has a command called `sam logs`. `sam logs` lets you fetch logs generated by your deployed Lambda function from the command line. In addition to printing the logs on the terminal, this command has several nifty features to help you quickly find the bug.
 
-`NOTE`: This command works for all AWS Lambda functions; not just the ones you deploy using SAM.
-
-```bash
-sam-app$ sam logs -n HelloWorldFunction --stack-name sam-app --tail
-```
-
-You can find more information and examples about filtering Lambda function logs in the [SAM CLI Documentation](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-logging.html).
-
-## Tests
-
-Tests are defined in the `tests` folder in this project. Use PIP to install the test dependencies and run tests.
-
-```bash
-sam-app$ pip install -r tests/requirements.txt --user
-# unit test
-sam-app$ python -m pytest tests/unit -v
-# integration test, requiring deploying the stack first.
-# Create the env variable AWS_SAM_STACK_NAME with the name of the stack we are testing
-sam-app$ AWS_SAM_STACK_NAME=<stack-name> python -m pytest tests/integration -v
-```
-
-## Cleanup
-
-To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
-
-```bash
-aws cloudformation delete-stack --stack-name sam-app
-```
-
-## Resources
-
-See the [AWS SAM developer guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html) for an introduction to SAM specification, the SAM CLI, and serverless application concepts.
-
-Next, you can use AWS Serverless Application Repository to deploy ready to use Apps that go beyond hello world samples and learn how authors developed their applications: [AWS Serverless Application Repository main page](https://aws.amazon.com/serverless/serverlessrepo/)
+###4. Future improvements
+1. Consider setting up a DLQ for failed lambda executions & cloud watch metrics for failure alerts.
+2. Consider using another lighter weight front end as Amplify has the capability to deploy full stack apps. Using a containerised front end service could be a viable alternative.
+3. Utilise Lambda layers to reduce redundant code.
+4. Enable cors in the cloud formation template.
+5. Complete the vote submission feature in the React app.
