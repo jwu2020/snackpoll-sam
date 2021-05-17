@@ -1,7 +1,6 @@
 # Serverless Snack Poll Results
 
-#
-1. Overview
+#1. Overview
 
 This project contains the source code and supporting files for a 3-tier serverless application built in AWS and deployed using AWS's SAM (Serverless Application Model) cli.
 
